@@ -13,6 +13,7 @@ module "sqlite" {
 
   databases = {
     "/var/lib/example/app.db" = { owner = "daemon", mode = "0640" }
+    "/srv/example/root.db"    = {}
   }
 }
 

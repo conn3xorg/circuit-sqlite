@@ -81,6 +81,27 @@ jobs:
             su -s /bin/sh daemon -c "sqlite3 $db \"CREATE TABLE IF NOT EXISTS t (n INTEGER); INSERT INTO t VALUES (6);\""
             sqlite3 $db "SELECT n FROM t LIMIT 1;" | grep -x 6
             [ "$(stat -c "%U:%G %a" $db)" = "daemon:daemon 640" ]
+            [ "$(stat -c "%U:%G %a" /srv/example/root.db)" = "root:root 640" ]
+          '
+      - name: A link at the database path leaves its target as it was
+        working-directory: examples/local
+        run: |
+          sudo podman exec circuit-sqlite bash -ec '
+            echo keep > /root/keep
+            chmod 600 /root/keep
+            rm /var/lib/example/app.db
+            ln -s /root/keep /var/lib/example/app.db
+          '
+          conn3x apply -auto-approve || true
+          sudo podman exec circuit-sqlite bash -ec '
+            [ "$(stat -c "%U:%G %a" /root/keep)" = "root:root 600" ]
+            grep -qx keep /root/keep
+            rm /var/lib/example/app.db
+          '
+          conn3x apply -auto-approve
+          conn3x plan -detailed-exitcode
+          sudo podman exec circuit-sqlite bash -ec '
+            [ "$(stat -c "%U:%G %a" /var/lib/example/app.db)" = "daemon:daemon 640" ]
           '
       - name: Clean up
         if: always()

@@ -1,6 +1,6 @@
 # Local example
 
-Applies circuit-sqlite to a throwaway Rocky Linux 10 container with systemd, installing SQLite and creating `/var/lib/example/app.db`, owned by `daemon`. You need Conn3x and Podman.
+Applies circuit-sqlite to a throwaway Rocky Linux 10 container with systemd, installing SQLite and creating `/var/lib/example/app.db`, owned by `daemon`, and `/srv/example/root.db`, owned by root. You need Conn3x and Podman.
 
 ```sh
 ./up.sh
