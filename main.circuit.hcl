@@ -32,11 +32,49 @@ circuit "sqlite" {
 
   # SQLite writes its journal beside the database, so the owner needs the
   # directory too. A directory that's already there is left as it is: it might
-  # be /var/lib. A database that's already there keeps its contents.
+  # be /var/lib. A database that's already there keeps its contents. Root only
+  # does this work where nobody else can change the path; anywhere else it's
+  # done as the owner, so it can't reach what the owner couldn't.
   step "database" {
     for_each = var.databases
     command {
-      command = "d=$(dirname '${item.key}'); [ -d \"$d\" ] || install -d -o '${item.value.owner}' -g '${coalesce(item.value.group, item.value.owner)}' -m 0750 \"$d\"; [ -s '${item.key}' ] || sqlite3 '${item.key}' 'VACUUM;'; chown '${item.value.owner}:${coalesce(item.value.group, item.value.owner)}' '${item.key}' && chmod '${item.value.mode}' '${item.key}'"
+      command = <<-EOT
+        set -e
+        db='${item.key}' o='${item.value.owner}' g='${coalesce(item.value.group, item.value.owner)}' m='${item.value.mode}'
+        # True when no account but root can change any part of the path.
+        only_root_changes() {
+          p=$(readlink -m -- "$1")
+          while :; do
+            if [ -e "$p" ]; then
+              [ "$(stat -c %u -- "$p")" = 0 ] && [ $((0$(stat -c %a -- "$p") & 022)) = 0 ] || return 1
+            fi
+            [ "$p" != / ] || return 0
+            p=$(dirname -- "$p")
+          done
+        }
+        d=$(dirname -- "$db")
+        if ! [ -d "$d" ] && only_root_changes "$d"; then install -d -o "$o" -g "$g" -m 0750 "$d"; fi
+        if only_root_changes "$d"; then
+          [ -s "$db" ] || sqlite3 "$db" 'VACUUM;'
+          chown "$o:$g" "$db"
+          chmod "$m" "$db"
+        elif [ "$o" = root ]; then
+          echo "$d can be changed by an account other than root, so root won't own a database there" >&2
+          exit 1
+        else
+          # Someone else can change the path, so this runs with only the owner's rights.
+          cd /
+          runuser -u "$o" -g "$g" -- sh -ec '
+            mkdir -p -m 0750 "$(dirname -- "$1")"
+            [ -s "$1" ] || sqlite3 "$1" "VACUUM;"
+            chgrp "$2" "$1"
+            chmod "$3" "$1"
+          ' sh "$db" "$g" "$m" || {
+            echo "$o couldn't set up $db. If another user owns it, change its owner once by hand" >&2
+            exit 1
+          }
+        fi
+      EOT
       unless  = "[ -s '${item.key}' ] && [ \"$(stat -c '%U:%G %a' '${item.key}')\" = '${item.value.owner}:${coalesce(item.value.group, item.value.owner)} ${trimprefix(item.value.mode, "0")}' ]"
     }
   }
