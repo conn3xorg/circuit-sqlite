@@ -114,7 +114,7 @@ jobs:
             mv /srv/example /srv/example.real
             su -s /bin/sh daemon -c "ln -s /var/keep /srv/example"
           '
-          ! conn3x apply -auto-approve
+          if conn3x apply -auto-approve; then echo "apply should have refused" >&2; exit 1; fi
           sudo podman exec circuit-sqlite bash -ec '
             [ "$(stat -c "%U:%G %a" /var/keep/root.db)" = "root:root 600" ]
             grep -qx keep /var/keep/root.db
