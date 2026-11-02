@@ -103,6 +103,27 @@ jobs:
           sudo podman exec circuit-sqlite bash -ec '
             [ "$(stat -c "%U:%G %a" /var/lib/example/app.db)" = "daemon:daemon 640" ]
           '
+      - name: Root doesn't own a database on a path another account can change
+        working-directory: examples/local
+        run: |
+          sudo podman exec circuit-sqlite bash -ec '
+            install -d -m 755 /var/keep
+            echo keep > /var/keep/root.db
+            chmod 600 /var/keep/root.db
+            chown daemon /srv
+            mv /srv/example /srv/example.real
+            su -s /bin/sh daemon -c "ln -s /var/keep /srv/example"
+          '
+          ! conn3x apply -auto-approve
+          sudo podman exec circuit-sqlite bash -ec '
+            [ "$(stat -c "%U:%G %a" /var/keep/root.db)" = "root:root 600" ]
+            grep -qx keep /var/keep/root.db
+            rm /srv/example
+            mv /srv/example.real /srv/example
+            chown root /srv
+          '
+          conn3x apply -auto-approve
+          conn3x plan -detailed-exitcode
       - name: Clean up
         if: always()
         working-directory: examples/local

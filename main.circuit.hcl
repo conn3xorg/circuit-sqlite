@@ -41,11 +41,20 @@ circuit "sqlite" {
       command = <<-EOT
         set -e
         db='${item.key}' o='${item.value.owner}' g='${coalesce(item.value.group, item.value.owner)}' m='${item.value.mode}'
-        # True when no account but root can change any part of the path.
+        # True when no account but root can change any part of the path, walked as
+        # written, or of where any link on the way points, one link at a time.
         only_root_changes() {
-          p=$(readlink -m -- "$1")
+          case $1 in /*) ;; *) return 1 ;; esac
+          [ "$${2:-0}" -lt 40 ] || return 1
+          # The /. keeps a trailing slash from hiding a link from -L.
+          p=$1/.
           while :; do
-            if [ -e "$p" ]; then
+            if [ -L "$p" ]; then
+              [ "$(stat -c %u -- "$p")" = 0 ] || return 1
+              t=$(readlink -- "$p")
+              case $t in /*) ;; *) t=$(dirname -- "$p")/$t ;; esac
+              (only_root_changes "$t" $(($${2:-0} + 1))) || return 1
+            elif [ -e "$p" ]; then
               [ "$(stat -c %u -- "$p")" = 0 ] && [ $((0$(stat -c %a -- "$p") & 022)) = 0 ] || return 1
             fi
             [ "$p" != / ] || return 0
