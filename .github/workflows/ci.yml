@@ -65,12 +65,25 @@ jobs:
           CONTAINERFILE: ${{ github.workspace }}/conn3x/test/images/${{ matrix.distro }}/Containerfile
           PODMAN: sudo podman
         run: ./up.sh
-      - name: Apply, then plan again with no changes
+      # Install with the last release first, then apply this checkout over
+      # it, as anyone moving to a new release does.
+      - name: Apply the previous release, v0.1.3, and write a row
         working-directory: examples/local
         run: |
+          sed -i 's|source = "../.."|source = "github.com/conn3xorg/circuit-sqlite?ref=v0.1.3"|' main.tf
+          conn3x init
+          conn3x apply -auto-approve
+          sudo podman exec circuit-sqlite su -s /bin/sh daemon -c \
+            'sqlite3 /var/lib/example/app.db "CREATE TABLE kept (n INTEGER); INSERT INTO kept VALUES (3);"'
+      - name: Upgrade to this checkout, apply, then plan again with no changes
+        working-directory: examples/local
+        run: |
+          sed -i 's|source = "github.com/conn3xorg/circuit-sqlite?ref=v0.1.3"|source = "../.."|' main.tf
+          grep -q 'source = "../.."' main.tf
           conn3x init
           conn3x apply -auto-approve
           conn3x plan -detailed-exitcode
+          sudo podman exec circuit-sqlite sqlite3 /var/lib/example/app.db "SELECT n FROM kept;" | grep -x 3
       - name: Create, write and read a table as the owner
         run: |
           sudo podman exec circuit-sqlite bash -lc '
