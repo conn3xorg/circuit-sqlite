@@ -19,7 +19,7 @@ The file format hasn't changed across these, so a database moves between them. A
 
 ```hcl
 module "sqlite" {
-  source = "github.com/conn3xorg/circuit-sqlite?ref=v0.1.3"
+  source = "github.com/conn3xorg/circuit-sqlite?ref=v0.1.4"
 
   hosts                = { app1 = "203.0.113.10", app2 = "203.0.113.11" }
   ssh_private_key_file = "~/.ssh/id_ed25519"
